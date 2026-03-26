@@ -1,6 +1,5 @@
 streamlit
-tensorflow-cpu
-pillow
-numpy
-matplotlip
+tensorflow-cpu==2.15.0
+Pillow
+numpy==1.26.4
 python-docx
