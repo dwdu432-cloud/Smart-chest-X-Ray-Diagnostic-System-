@@ -1,7 +1,7 @@
 streamlit
-tensorflow-cpu==2.15.0
-Pillow
-numpy==1.26.4
-python-docx
+tensorflow-cpu
 opencv-python-headless
+Pillow
+numpy
 matplotlib
+python-docx
