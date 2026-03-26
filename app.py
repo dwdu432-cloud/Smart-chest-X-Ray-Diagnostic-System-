@@ -2,12 +2,9 @@ import streamlit as st
 import tensorflow as tf
 from PIL import Image
 import numpy as np
-import base64
 import os
 import matplotlib.pyplot as plt
-import cv2
 from datetime import datetime
-import json
 from docx import Document
 import io
 
@@ -100,7 +97,10 @@ st.markdown(css, unsafe_allow_html=True)
 col_uni, col_title, col_dept = st.columns([1, 3, 1])
 
 with col_uni:
-    st.image("https://uomus.edu.iq/img/logo.png", width=100) 
+    try:
+        st.image("https://uomus.edu.iq/img/logo.png", width=100)
+    except:
+        st.markdown("**University Logo**")
 
 with col_title:
     st.markdown("""
@@ -113,9 +113,9 @@ with col_title:
 
 with col_dept:
     try:
-        st.image("/content/logo2.png", width=100)
+        st.image("logo2.png", width=100)
     except:
-        st.markdown("<p style='text-align: center; font-size: 0.8rem; color: #00d4ff;'>Department Logo</p>", unsafe_allow_html=True)
+        st.markdown("**Department Logo**")
 
 st.markdown("---")
 
@@ -124,35 +124,42 @@ st.markdown("---")
 # ========================================
 @st.cache_resource
 def load_trained_model():
-    """تحميل النموذج المدرب"""
+    """تحميل النموذج المدرب مع معالجة الأخطاء"""
     try:
-        model_paths = ['medical_multi_model.h5', '/content/medical_multi_model.h5', 'best_model.h5']
+        model_paths = ['medical_multi_model.h5', 'best_model.h5']
         for path in model_paths:
             if os.path.exists(path):
                 try:
-                    # محاولة التحميل العادي
                     return tf.keras.models.load_model(path), True
                 except Exception as e:
-                    # إذا فشل، حمّل مع الإعدادات القديمة
-                    st.warning(f"⚠️ محاولة تحميل النموذج بطريقة متوافقة...")
+                    st.warning(f"⚠️ محاولة تحميل النموذج بطريقة بديلة...")
                     try:
-                        model = tf.keras.models.load_model(
-                            path, 
-                            custom_objects=None,
-                            compile=False  # تحميل بدون تجميع
-                        )
-                        model.compile()
+                        model = tf.keras.models.load_model(path, compile=False)
                         return model, True
-                    except Exception as e2:
-                        st.error(f"❌ فشل التحميل: {str(e2)}")
-                        return None, False
+                    except:
+                        continue
         return None, False
     except Exception as e:
         st.error(f"❌ خطأ في تحميل النموذج: {str(e)}")
         return None, False
 
+model, is_loaded = load_trained_model()
+class_names = ['COVID19', 'Normal', 'Pneumonia', 'Tuberculosis']
+colors = {
+    'COVID19': '#e74c3c',
+    'Normal': '#2ecc71',
+    'Pneumonia': '#f39c12',
+    'Tuberculosis': '#9b59b6'
+}
+
+if not is_loaded:
+    st.error("❌ لم يتم العثور على النموذج المدرب! تأكد من وجود ملف medical_multi_model.h5")
+    st.stop()
+
+st.success("✅ النموذج جاهز!")
+
 # ========================================
-# 🎯 الشريط الجانبي
+# 🎯 الشريط الجانبي (Sidebar)
 # ========================================
 st.sidebar.markdown("### ⚙️ الإعدادات")
 confidence_threshold = st.sidebar.slider("📌 حد الثقة الأدنى (%)", 0, 100, 50, 5)
@@ -170,6 +177,7 @@ st.markdown("### 📤 رفع صورة الأشعة السينية")
 uploaded_file = st.file_uploader("اختر صورة (JPG, PNG, JPEG)", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
+    # فتح الصورة
     img = Image.open(uploaded_file).convert('RGB')
     
     # التنبؤ
@@ -178,18 +186,21 @@ if uploaded_file:
     img_expanded = np.expand_dims(img_norm, axis=0)
     predictions = model.predict(img_expanded, verbose=0)
     
+    # استخراج النتائج
     predicted_idx = np.argmax(predictions[0])
     label = class_names[predicted_idx]
     color = colors.get(label, "#3498db")
     confidence_val = np.max(predictions[0]) * 100
 
     # ========================================
-    # 📊 عرض النتائج
+    # 📊 عرض النتائج - وضع بسيط
     # ========================================
     if display_mode == "بسيط":
         col1, col2 = st.columns(2)
+        
         with col1:
             st.image(img, caption='الصورة المرفوعة', use_container_width=True)
+        
         with col2:
             st.markdown("### 🔬 النتيجة")
             st.markdown(f"""
@@ -201,7 +212,10 @@ if uploaded_file:
             
             if confidence_val < confidence_threshold:
                 st.warning(f"⚠️ الثقة أقل من {confidence_threshold}%")
-    
+
+    # ========================================
+    # 📊 عرض النتائج - وضع متقدم
+    # ========================================
     elif display_mode == "متقدم":
         st.markdown("### 📊 التحليل المتقدم")
         col1, col2 = st.columns([1.2, 1])
@@ -223,25 +237,28 @@ if uploaded_file:
             colors_list = [colors.get(d, '#3498db') for d in class_names]
             
             bars = ax.barh(class_names, probs, color=colors_list)
-            ax.set_xlabel('الثقة (%)', color='white')
+            ax.set_xlabel('الثقة (%)', color='white', fontweight='bold')
             ax.set_facecolor('#1a1a1a')
             fig.patch.set_facecolor('#1a1a1a')
             ax.tick_params(colors='white')
             
             for bar, prob in zip(bars, probs):
-                ax.text(prob + 1, bar.get_y() + bar.get_height()/2, f'{prob:.1f}%', 
+                ax.text(prob + 1, bar.get_y() + bar.get_height()/2, f'{prob:.1f}%',
                        va='center', color='white', fontweight='bold')
             
             st.pyplot(fig)
 
+    # ========================================
+    # 📋 عرض النتائج - وضع تقرير
+    # ========================================
     elif display_mode == "تقرير":
         st.markdown("### 📋 التقرير الطبي الكامل")
         
-        # عرض صورة مصغرة
         st.image(img, width=250, caption="صورة الأشعة المرفقة")
         st.success(f"التشخيص النهائي: {label}")
 
         def create_word_report():
+            """إنشاء تقرير Word"""
             doc = Document()
             doc.add_heading('Medical AI Diagnostic Report', 0)
             doc.add_paragraph(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -261,7 +278,8 @@ if uploaded_file:
                 doc.add_paragraph(f"- {name}: {predictions[0][i]*100:.2f}%")
             
             doc.add_heading('Academic Reference', level=2)
-            doc.add_paragraph("AI Engineering Department - Al-Mustaqbal University.")
+            doc.add_paragraph("AI Engineering Department - Al-Mustaqbal University")
+            doc.add_paragraph("Smart Chest X-Ray Diagnostic System v1.0")
             
             bio = io.BytesIO()
             doc.save(bio)
@@ -272,7 +290,7 @@ if uploaded_file:
         st.download_button(
             label="📄 تحميل التقرير بصيغة Word",
             data=word_data,
-            file_name=f"Medical_Report_{label}.docx",
+            file_name=f"Medical_Report_{label}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.docx",
             mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         )
 
@@ -295,5 +313,3 @@ st.markdown("""
     <p>هذا النظام <strong>للمساعدة الأولية فقط</strong> وليس بديل عن الطبيب المتخصص</p>
 </div>
 """, unsafe_allow_html=True)
-
-print("✅ تطبيق Streamlit جاهز!")
