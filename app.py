@@ -129,21 +129,27 @@ def load_trained_model():
         model_paths = ['medical_multi_model.h5', '/content/medical_multi_model.h5', 'best_model.h5']
         for path in model_paths:
             if os.path.exists(path):
-                return tf.keras.models.load_model(path), True
+                try:
+                    # محاولة التحميل العادي
+                    return tf.keras.models.load_model(path), True
+                except Exception as e:
+                    # إذا فشل، حمّل مع الإعدادات القديمة
+                    st.warning(f"⚠️ محاولة تحميل النموذج بطريقة متوافقة...")
+                    try:
+                        model = tf.keras.models.load_model(
+                            path, 
+                            custom_objects=None,
+                            compile=False  # تحميل بدون تجميع
+                        )
+                        model.compile()
+                        return model, True
+                    except Exception as e2:
+                        st.error(f"❌ فشل التحميل: {str(e2)}")
+                        return None, False
         return None, False
     except Exception as e:
         st.error(f"❌ خطأ في تحميل النموذج: {str(e)}")
         return None, False
-
-model, is_loaded = load_trained_model()
-class_names = ['COVID19', 'Normal', 'Pneumonia', 'Tuberculosis']
-colors = {'COVID19': '#e74c3c', 'Normal': '#2ecc71', 'Pneumonia': '#f39c12', 'Tuberculosis': '#9b59b6'}
-
-if not is_loaded:
-    st.error("❌ لم يتم العثور على النموذج المدرب!")
-    st.stop()
-
-st.success("✅ النموذج جاهز!")
 
 # ========================================
 # 🎯 الشريط الجانبي
