@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import cv2
 from datetime import datetime
 import json
+from docx import Document
+import io
 
 # ========================================
 # 📱 PAGE CONFIGURATION - إعدادات الصفحة
@@ -93,13 +95,11 @@ p, span {
 st.markdown(css, unsafe_allow_html=True)
 
 # ========================================
-# 🏥 الرأس الرئيسي (Header) المصحح
+# 🏥 الرأس الرئيسي (Header)
 # ========================================
 col_uni, col_title, col_dept = st.columns([1, 3, 1])
 
 with col_uni:
-    # لوجو جامعة المستقبل (الجهة اليسرى)
-    # ملاحظة: تأكد من وجود ملف باسم uni_logo.png أو استخدم رابط
     st.image("https://uomus.edu.iq/img/logo.png", width=100) 
 
 with col_title:
@@ -112,10 +112,10 @@ with col_title:
     """, unsafe_allow_html=True)
 
 with col_dept:
-    # لوجو القسم (الجهة اليمنى)
-    # استبدل الرابط أدناه بلوجو القسم الخاص بك إذا كان متوفراً
-    st.image("/content/logo2.png", width=100)
-    st.markdown("<p style='text-align: center; font-size: 0.8rem; color: #00d4ff;'></p>", unsafe_allow_html=True)
+    try:
+        st.image("/content/logo2.png", width=100)
+    except:
+        st.markdown("<p style='text-align: center; font-size: 0.8rem; color: #00d4ff;'>Department Logo</p>", unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -153,7 +153,7 @@ confidence_threshold = st.sidebar.slider("📌 حد الثقة الأدنى (%)"
 display_mode = st.sidebar.radio("🎯 وضع العرض", ["بسيط", "متقدم", "تقرير"])
 
 st.sidebar.markdown("---")
-st.sidebar.markdown("### 📚 أنواع الامراض")
+st.sidebar.markdown("### 📚 أنواع الأمراض")
 for disease in class_names:
     st.sidebar.info(f"**{disease}**")
 
@@ -165,7 +165,6 @@ uploaded_file = st.file_uploader("اختر صورة (JPG, PNG, JPEG)", type=["jp
 
 if uploaded_file:
     img = Image.open(uploaded_file).convert('RGB')
-    img_array = np.array(img)
     
     # التنبؤ
     img_resized = img.resize((224, 224))
@@ -174,26 +173,27 @@ if uploaded_file:
     predictions = model.predict(img_expanded, verbose=0)
     
     predicted_idx = np.argmax(predictions[0])
-    confidence = np.max(predictions[0]) * 100
-    
+    label = class_names[predicted_idx]
+    color = colors.get(label, "#3498db")
+    confidence_val = np.max(predictions[0]) * 100
+
     # ========================================
     # 📊 عرض النتائج
     # ========================================
     if display_mode == "بسيط":
         col1, col2 = st.columns(2)
         with col1:
-            st.image(img, caption='الصورة الم��فوعة', use_container_width=True)
+            st.image(img, caption='الصورة المرفوعة', use_container_width=True)
         with col2:
             st.markdown("### 🔬 النتيجة")
-            color = colors[class_names[predicted_idx]]
             st.markdown(f"""
             <div class='prediction-box' style='background: {color}33; border-color: {color};'>
-                <div>{class_names[predicted_idx]}</div>
-                <small>الثقة: {confidence:.1f}%</small>
+                <div>{label}</div>
+                <small>الثقة: {confidence_val:.1f}%</small>
             </div>
             """, unsafe_allow_html=True)
             
-            if confidence < confidence_threshold:
+            if confidence_val < confidence_threshold:
                 st.warning(f"⚠️ الثقة أقل من {confidence_threshold}%")
     
     elif display_mode == "متقدم":
@@ -204,21 +204,19 @@ if uploaded_file:
             st.image(img, caption='الصورة المرفوعة', use_container_width=True)
         
         with col2:
-            color = colors[class_names[predicted_idx]]
             st.markdown(f"""
             <div class='prediction-box' style='background: {color}33; border-color: {color};'>
-                {class_names[predicted_idx]}<br>
-                <small>{confidence:.2f}%</small>
+                {label}<br>
+                <small>{confidence_val:.2f}%</small>
             </div>
             """, unsafe_allow_html=True)
             
             # رسم بياني
             fig, ax = plt.subplots(figsize=(10, 5))
-            diseases = class_names
             probs = predictions[0] * 100
-            colors_list = [colors.get(d, '#3498db') for d in diseases]
+            colors_list = [colors.get(d, '#3498db') for d in class_names]
             
-            bars = ax.barh(diseases, probs, color=colors_list)
+            bars = ax.barh(class_names, probs, color=colors_list)
             ax.set_xlabel('الثقة (%)', color='white')
             ax.set_facecolor('#1a1a1a')
             fig.patch.set_facecolor('#1a1a1a')
@@ -229,67 +227,11 @@ if uploaded_file:
                        va='center', color='white', fontweight='bold')
             
             st.pyplot(fig)
-    
-  # ========================================
-    # 📊 عرض النتائج (المصحح)
-    # ========================================
-   # ========================================
-    # 📊 عرض النتائج (منع التكرار + تقرير الوورد)
-    # ========================================
-    
-    # تعريف المتغيرات الأساسية مرة واحدة لتجنب IndexError
-    predicted_idx = np.argmax(predictions[0])
-    label = class_names[predicted_idx] if predicted_idx < len(class_names) else "Unknown"
-    color = colors.get(label, "#3498db")
-    confidence_val = np.max(predictions[0]) * 100
-
-    if display_mode == "بسيط":
-        col1, col2 = st.columns(2)
-        with col1:
-            st.image(img, caption='الصورة المرفوعة', use_container_width=True)
-        with col2:
-            st.markdown(f"""
-            <div class='prediction-box' style='background: {color}33; border-color: {color};'>
-                <div>{label}</div>
-                <small>الثقة: {confidence_val:.1f}%</small>
-            </div>
-            """, unsafe_allow_html=True)
-            if confidence_val < confidence_threshold:
-                st.warning(f"⚠️ الثقة أقل من {confidence_threshold}%")
-
-    elif display_mode == "متقدم":
-        st.markdown("### 📊 التحليل المتقدم")
-        col1, col2 = st.columns([1.2, 1])
-        with col1:
-            st.image(img, caption='الصورة المرفوعة', use_container_width=True)
-        with col2:
-            st.markdown(f"""
-            <div class='prediction-box' style='background: {color}33; border-color: {color};'>
-                {label}<br>
-                <small>{confidence_val:.2f}%</small>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # الرسم البياني
-            fig, ax = plt.subplots(figsize=(10, 5))
-            probs = predictions[0] * 100
-            colors_list = [colors.get(d, '#3498db') for d in class_names]
-            bars = ax.barh(class_names, probs, color=colors_list)
-            ax.set_xlabel('الثقة (%)', color='white')
-            ax.set_facecolor('#1a1a1a')
-            fig.patch.set_facecolor('#1a1a1a')
-            ax.tick_params(colors='white')
-            for bar, prob in zip(bars, probs):
-                ax.text(prob + 1, bar.get_y() + bar.get_height()/2, f'{prob:.1f}%', 
-                        va='center', color='white', fontweight='bold')
-            st.pyplot(fig)
 
     elif display_mode == "تقرير":
         st.markdown("### 📋 التقرير الطبي الكامل")
-        from docx import Document
-        import io
         
-        # عرض صورة مصغرة في صفحة التقرير
+        # عرض صورة مصغرة
         st.image(img, width=250, caption="صورة الأشعة المرفقة")
         st.success(f"التشخيص النهائي: {label}")
 
@@ -297,11 +239,13 @@ if uploaded_file:
             doc = Document()
             doc.add_heading('Medical AI Diagnostic Report', 0)
             doc.add_paragraph(f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            doc.add_paragraph(f"Engineer: ABDULLAH BSHAR SALIH") # اسمك ثابت بالتقرير
+            doc.add_paragraph(f"Engineer: ABDULLAH BSHAR SALIH")
+            
             doc.add_heading('Analysis Results', level=1)
             p = doc.add_paragraph()
             p.add_run('Diagnosis: ').bold = True
             p.add_run(label)
+            
             p = doc.add_paragraph()
             p.add_run('Confidence Level: ').bold = True
             p.add_run(f"{confidence_val:.2f}%")
@@ -315,6 +259,7 @@ if uploaded_file:
             
             bio = io.BytesIO()
             doc.save(bio)
+            bio.seek(0)
             return bio.getvalue()
 
         word_data = create_word_report()
@@ -346,4 +291,3 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 print("✅ تطبيق Streamlit جاهز!")
-
